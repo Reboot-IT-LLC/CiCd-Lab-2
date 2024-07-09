@@ -36,7 +36,7 @@ jobs:
       with:
         fetch-depth: 0  # Ensure full history is fetched to allow commits
     - name: Terraform Init
-      run: terraform -chdir=infrastructure init
+      run: terraform -chdir=infrastructure init -migrate-state
       env:
         ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
         ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
