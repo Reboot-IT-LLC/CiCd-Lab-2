@@ -1,0 +1,75 @@
+name: Deploy AKS Cluster
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure/**'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Ensure full history is fetched to allow commits
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: '0.14.9'
+
+  azure_login:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+  terraform_init:
+    needs: azure_login
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Ensure full history is fetched to allow commits
+    - name: Terraform Init
+      run: terraform -chdir=infrastructure init -reconfigure
+      env:
+        ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+    - name: List Files After Init
+      run: ls -la infrastructure
+    - name: Check and Commit Lock File
+      run: |
+        if [ -f infrastructure/terraform.lock.hcl ]; then
+          echo "terraform.lock.hcl found. Preparing to commit."
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add infrastructure/terraform.lock.hcl
+          git commit -m "Add terraform.lock.hcl"
+          git push origin HEAD:main
+        else
+          echo "terraform.lock.hcl not found."
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  terraform_apply:
+    needs: terraform_init
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Ensure full history is fetched to allow commits
+    - name: Terraform Apply
+      run: terraform -chdir=infrastructure apply -auto-approve -parallelism=30  
+      env:
+        ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
